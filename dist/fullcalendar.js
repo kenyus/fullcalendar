@@ -2220,7 +2220,7 @@ function EventManager(options) { // assumed to be a calendar
 
 
 	function isEventAllowedInRange(event, start, end) {
-		var source = event.source || {};
+	    var source = event.source || {};
 		var constraint = firstDefined(
 			event.constraint,
 			source.constraint,
@@ -2236,12 +2236,12 @@ function EventManager(options) { // assumed to be a calendar
 	}
 
 
-	function isSelectionAllowedInRange(start, end) {
+	function isSelectionAllowedInRange(start, end, sourceSeg) { //KHA: 15/01/2015 - added extra sourceSeg for selection overlap check
 		return isRangeAllowed(
 			start,
 			end,
 			options.selectConstraint,
-			options.selectOverlap
+			options.selectOverlap, undefined, sourceSeg
 		);
 	}
 
@@ -2263,8 +2263,8 @@ function EventManager(options) { // assumed to be a calendar
 	// Returns true if the given range (caused by an event drop/resize or a selection) is allowed to exist
 	// according to the constraint/overlap settings.
 	// `event` is not required if checking a selection.
-	function isRangeAllowed(start, end, constraint, overlap, event) {
-		var constraintEvents;
+	function isRangeAllowed(start, end, constraint, overlap, event, sourceSeg) {//KHA: 15/01/2015 - added extra sourceSeg for selection overlap check
+	    var constraintEvents;
 		var anyContainment;
 		var i, otherEvent;
 		var otherOverlap;
@@ -2275,8 +2275,8 @@ function EventManager(options) { // assumed to be a calendar
 
 		// the range must be fully contained by at least one of produced constraint events
 		if (constraint != null) {
-			constraintEvents = constraintToEvents(constraint);
-			anyContainment = false;
+		    constraintEvents = constraintToEvents(constraint);
+		    anyContainment = false;
 
 			for (i = 0; i < constraintEvents.length; i++) {
 				if (eventContainsRange(constraintEvents[i], start, end)) {
@@ -2289,7 +2289,6 @@ function EventManager(options) { // assumed to be a calendar
 				return false;
 			}
 		}
-
 		for (i = 0; i < cache.length; i++) { // loop all events and detect overlap
 			otherEvent = cache[i];
 
@@ -2300,12 +2299,11 @@ function EventManager(options) { // assumed to be a calendar
 
 			// there needs to be an actual intersection before disallowing anything
 			if (eventIntersectsRange(otherEvent, start, end)) {
-
 				// evaluate overlap for the given range and short-circuit if necessary
 				if (overlap === false) {
 					return false;
 				}
-				else if (typeof overlap === 'function' && !overlap(otherEvent, event)) {
+				else if (typeof overlap === 'function' && !overlap(otherEvent, event, sourceSeg)) {//KHA: 15/01/2015 - added extra sourceSeg for selection overlap check
 					return false;
 				}
 
@@ -2337,7 +2335,7 @@ function EventManager(options) { // assumed to be a calendar
 	// An object with specific start/end dates or a recurring event (like what businessHours accepts)
 	function constraintToEvents(constraintInput) {
 
-		if (constraintInput === 'businessHours') {
+	    if (constraintInput === 'businessHours') {
 			return getBusinessHoursEvents();
 		}
 
@@ -4888,7 +4886,7 @@ $.extend(Grid.prototype, {
 					}
 
 					if (isSelectable) {
-						if (calendar.isSelectionAllowedInRange(start, end)) { // allowed to select within this range?
+					    if (calendar.isSelectionAllowedInRange(start, end, sourceSeg)) { // allowed to select within this range? KHA: 15/01/2015 - added extra sourceSeg for selection overlap check
 							_this.renderSelection(start, end, sourceSeg);
 						}
 						else {
@@ -5753,7 +5751,8 @@ $.extend(Grid.prototype, {
 
 	// Converts an array of event objects into an array of event segment objects.
 	// A custom `rangeToSegsFunc` may be given for arbitrarily slicing up events.
-	eventsToSegs: function(events, rangeToSegsFunc) {
+	eventsToSegs: function (events, rangeToSegsFunc) {
+
 		var eventRanges = this.eventsToRanges(events);
 		var segs = [];
 		var i;
@@ -5878,12 +5877,12 @@ $.extend(Grid.prototype, {
 			segs = this.rangeToSegs(eventRange.start, eventRange.end); // defined by the subclass
 		}
 
-		if (view.name === 'resourceDay') {
+		if (view.name === 'resourceDay' && eventRange.event && eventRange.event.className != 'fc-nonbusiness') {    //KHA: 14/01/15 - fixed business hours render on resourceDay view
 				// Filters the events according to the resource columns
 				var resources = view.resources();
 
-				segs = $.grep(segs, function(seg, i) {
-					return resources[i] && view.hasResource(eventRange.event, resources[i]);
+				segs = $.grep(segs, function (seg, i) {
+				    return resources[i] && view.hasResource(eventRange.event, resources[i]);
 				});
 		}
 
@@ -7088,7 +7087,8 @@ $.extend(TimeGrid.prototype, {
 
 
 	renderBusinessHours: function() {
-		var events = this.view.calendar.getBusinessHoursEvents();
+	    var events = this.view.calendar.getBusinessHoursEvents();
+
 		this.businessHourSegs = this.renderFill('businessHours', this.eventsToSegs(events), 'bgevent');
 	},
 
@@ -8263,7 +8263,7 @@ View.prototype = {
 
 	// Selects a date range on the view. `start` and `end` are both Moments.
 	// `ev` is the native mouse event that begin the interaction.
-	select: function(start, end, ev) {
+	select: function (start, end, ev) {
 		this.unselect(ev);
 		this.renderSelection(start, end);
 		this.reportSelection(start, end, ev);
@@ -9611,7 +9611,7 @@ $.extend(AgendaView.prototype, {
 		}
 
 		scroll();
-		setTimeout(scroll, 0); // overrides any previous scroll state made by the browser
+		setTimeout(scroll, 50); // overrides any previous scroll state made by the browser //KHA: 16/01/2015 - added delay to make so that scrollTime will work
 	},
 
 
