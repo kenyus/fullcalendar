@@ -857,15 +857,18 @@ function Calendar(element, instanceOptions) {
 		if (elementVisible()) {
 			freezeContentHeight();
 			currentView.destroyEvents(); // no performance cost if never rendered
-			currentView.renderEvents($.grep(events, function(event) {
-			var end = event.end;
+			currentView.renderEvents(events);   //KHA: 13/02/2015 - Comment out section because of issues with events having universal time of a previous day is not showing in view
+			//currentView.renderEvents($.grep(events, function(event) {
+			//    var end = event.end;
 
-			if(!end) {
-				end = currentView.calendar.getEventEnd(event);
-			}
+			//    if (!end) {
+			//        end = currentView.calendar.getEventEnd(event);
+			//    }
 
-				return end > currentView.start && event.start < currentView.end;
-			}));
+			//    console.log(event, currentView.start.toDate(), event.start, (end > currentView.start && event.start < currentView.end))
+
+			//    return end > currentView.start && event.start < currentView.end;
+			//}));
 			unfreezeContentHeight();
 		}
 	}
@@ -2278,8 +2281,18 @@ function EventManager(options) { // assumed to be a calendar
 		    constraintEvents = constraintToEvents(constraint);
 		    anyContainment = false;
 
-			for (i = 0; i < constraintEvents.length; i++) {
-				if (eventContainsRange(constraintEvents[i], start, end)) {
+		    for (i = 0; i < constraintEvents.length; i++) {
+		        var isResources = true;     //KHA: 23/02/2015 - custom resource check when user perform calendar selection
+		        if (constraintEvents[i].resources && sourceSeg && sourceSeg.event && sourceSeg.event.resources) {
+		            isResources = false;
+		            for (var a = sourceSeg.event.resources.length; a--;) {   //compare all resources
+		                if (constraintEvents[i].resources.indexOf(sourceSeg.event.resources[a]) > -1) {
+		                    isResources = true;
+                            break;
+		                }
+		            }
+		        }
+		        if (eventContainsRange(constraintEvents[i], start, end) && isResources) {
 					anyContainment = true;
 					break;
 				}
@@ -5476,7 +5489,7 @@ $.extend(Grid.prototype, {
 		var calendar = view.calendar;
 		var el = seg.el;
 		var event = seg.event;
-		var newStart, newEnd;
+		var newStart, newEnd, validResource;    //KHA: 14/09/2015 - Fix event drag undo overlap event, making sure only update if resource is valid
 		var originalResources;
 
 		// A clone of the original element that will move with the mouse
@@ -5510,11 +5523,12 @@ $.extend(Grid.prototype, {
 				newEnd = res.end;
 
 				if (view.name === 'resourceDay') {
-					event.resources = [view.resources()[cell.col].id];
+				    validResource = true;    //KHA: 14/09/2015 - Fix event drag undo overlap event, making sure only update if resource is valid
+				    event.resources = [view.resources()[cell.col].id];
 				}
 
-				if (calendar.isEventAllowedInRange(event, newStart, res.visibleEnd)) { // allowed to drop here?
-					if (view.renderDrag(newStart, newEnd, seg)) { // have the view render a visual indication
+                if (calendar.isEventAllowedInRange(event, newStart, res.visibleEnd)) { // allowed to drop here?
+                    if (view.renderDrag(newStart, newEnd, seg)) { // have the view render a visual indication
 						mouseFollower.hide(); // if the view is already using a mock event "helper", hide our own
 					}
 					else {
@@ -5522,8 +5536,9 @@ $.extend(Grid.prototype, {
 					}
 				}
 				else {
-					// have the helper follow the mouse (no snapping) with a warning-style cursor
+                    // have the helper follow the mouse (no snapping) with a warning-style cursor
 					newStart = null; // mark an invalid drop date
+					validResource = false;    //KHA: 14/09/2015 - Fix event drag undo overlap event, making sure only update if resource is valid
 					mouseFollower.show();
 					disableCursor();
 				}
@@ -5538,14 +5553,14 @@ $.extend(Grid.prototype, {
 				var hasChanged = newStart && !newStart.isSame(event.start);
 
 				if (view.name === 'resourceDay') {
-					var sameResources = $(originalResources).not(event.resources).length === 0 &&
+				    var sameResources = $(originalResources).not(event.resources).length === 0 &&
 							$(event.resources).not(originalResources).length === 0;
-					hasChanged = hasChanged || !sameResources;
+				    hasChanged = hasChanged || (!sameResources && validResource);    //KHA: 14/09/2015 - Fix event drag undo overlap event, making sure only update if resource is valid
 				}
 
 				// do revert animation if hasn't changed. calls a callback when finished (whether animation or not)
 				mouseFollower.stop(!hasChanged, function() {
-					_this.isDraggingSeg = false;
+				    _this.isDraggingSeg = false;
 					view.destroyDrag();
 					view.showEvent(event);
 					view.trigger('eventDragStop', el[0], event, ev, {}); // last argument is jqui dummy
