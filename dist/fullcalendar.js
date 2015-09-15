@@ -2292,6 +2292,15 @@ function EventManager(options) { // assumed to be a calendar
 		                }
 		            }
 		        }
+		        else if (constraintEvents[i].resources && event && event.resources && event.resources.length) {    //KHA: 19/09/2015 - custom resource check when user perform event drag, making sure constrain is checked, only check if event is constraint to a resource
+		            isResources = false;
+		            for (var b = event.resources.length; b--;) {   //compare all resources
+		                if (constraintEvents[i].resources.indexOf(event.resources[b]) > -1) {
+		                    isResources = true;
+		                    break;
+		                }
+		            }
+		        }
 		        if (eventContainsRange(constraintEvents[i], start, end) && isResources) {
 					anyContainment = true;
 					break;
